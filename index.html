@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Mail - a Simple Disposable Email Service</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gradient-to-br from-indigo-50 to-purple-100 min-h-screen flex flex-col items-center justify-center p-4">
+    <div class="container mx-auto max-w-xl">
+        <div class="bg-white shadow-2xl rounded-2xl p-8 transform transition-all hover:scale-105 duration-300">
+            <div class="text-center mb-6">
+                <h1 class="text-3xl font-extrabold text-indigo-800 mb-2">Secure Mail</h1>
+                <p class="text-gray-500">a Simple Disposable Email Service</p>
+            </div>
+
+            <div id="email-section" class="mb-6">
+                <div class="flex shadow-md rounded-lg overflow-hidden">
+                    <input 
+                        type="text" 
+                        id="email-address" 
+                        readonly 
+                        class="flex-grow p-3 bg-gray-100 text-gray-700 focus:outline-none"
+                        placeholder="Your temporary email"
+                    >
+                    <button 
+                        id="copy-btn" 
+                        class="bg-indigo-500 text-white px-4 hover:bg-indigo-600 transition-colors flex items-center"
+                    >
+                        <i class="fas fa-copy mr-2"></i>Copy
+                    </button>
+                </div>
+                <div class="flex space-x-2 mt-4">
+                    <button 
+                        id="generate-btn" 
+                        class="flex-grow bg-green-500 text-white p-3 rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center"
+                    >
+                        <i class="fas fa-sync mr-2"></i>Generate New Email
+                    </button>
+                </div>
+            </div>
+
+            <div id="messages-section" class="mt-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-semibold text-indigo-700">Inbox</h2>
+                    <div class="flex items-center space-x-2">
+                        <span id="message-count" class="text-gray-600 text-sm">0 messages</span>
+                        <button 
+                            id="refresh-btn" 
+                            class="text-purple-500 hover:text-purple-700 transition-colors"
+                        >
+                            <i class="fas fa-sync"></i>
+                        </button>
+                    </div>
+                </div>
+                <div 
+                    id="messages-container" 
+                    class="border-2 border-gray-200 rounded-lg p-4 max-h-80 overflow-y-auto"
+                >
+                    <p id="no-messages" class="text-center text-gray-500">No messages yet</p>
+					
+					
+                </div>
+				    <div class="powered-by text-center mt-4 text-sm text-gray-600">
+        powered by by <a href="https://www.1secmail.com/api/" target="_blank" class="text-indigo-600 hover:underline">1SecMail API</a>
+    </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <script>
+        class tempmailservice {
+            constructor() {
+                this.baseUrl = 'https://www.1secmail.com/api/v1/';
+                this.currentEmail = null;
+
+                this.initializeEventListeners();
+                this.generateNewEmail();
+            }
+
+            initializeEventListeners() {
+                document.getElementById('generate-btn').addEventListener('click', () => this.generateNewEmail());
+                document.getElementById('copy-btn').addEventListener('click', () => this.copyEmailToClipboard());
+                document.getElementById('refresh-btn').addEventListener('click', () => this.fetchMessages());
+            }
+
+            async generateNewEmail() {
+                const loginName = this.generateRandomLogin();
+                const domain = await this.fetchDomain();
+                this.currentEmail = `${loginName}@${domain}`;
+                
+                document.getElementById('email-address').value = this.currentEmail;
+                document.getElementById('no-messages').textContent = 'No messages yet';
+                document.getElementById('messages-container').innerHTML = 
+                    '<p id="no-messages" class="text-center text-gray-500">No messages yet</p>';
+                document.getElementById('message-count').textContent = '0 messages';
+            }
+
+            generateRandomLogin() {
+                return Math.random().toString(36).substring(2, 10);
+            }
+
+            async fetchDomain() {
+                const response = await fetch(`${this.baseUrl}?action=getDomainList`);
+                const domains = await response.json();
+                return domains[Math.floor(Math.random() * domains.length)];
+            }
+
+            copyEmailToClipboard() {
+                const emailInput = document.getElementById('email-address');
+                emailInput.select();
+                document.execCommand('copy');
+                
+                const copyBtn = document.getElementById('copy-btn');
+                copyBtn.innerHTML = '<i class="fas fa-check mr-2"></i>Copied!';
+                setTimeout(() => {
+                    copyBtn.innerHTML = '<i class="fas fa-copy mr-2"></i>Copy';
+                }, 2000);
+            }
+
+            async fetchMessages() {
+                if (!this.currentEmail) return;
+
+                const [login, domain] = this.currentEmail.split('@');
+                const messagesContainer = document.getElementById('messages-container');
+                const messageCountEl = document.getElementById('message-count');
+                
+                try {
+                    const response = await fetch(
+                        `${this.baseUrl}?action=getMessages&login=${login}&domain=${domain}`
+                    );
+                    const messages = await response.json();
+
+                    messageCountEl.textContent = `${messages.length} messages`;
+
+                    if (messages.length === 0) {
+                        messagesContainer.innerHTML = 
+                            '<p class="text-center text-gray-500">No messages yet</p>';
+                        return;
+                    }
+
+                    messagesContainer.innerHTML = '';
+                    for (const message of messages) {
+                        const messageEl = document.createElement('div');
+                        messageEl.classList.add('border-b', 'py-3', 'hover:bg-gray-50', 'transition-colors', 'rounded');
+                        
+                        const fetchFullMessage = async () => {
+                            const fullMsgResponse = await fetch(
+                                `${this.baseUrl}?action=readMessage&login=${login}&domain=${domain}&id=${message.id}`
+                            );
+                            const fullMessage = await fullMsgResponse.json();
+                            
+                            messageEl.innerHTML = `
+                                <div>
+                                    <p class="font-bold text-indigo-700">${fullMessage.from || 'Unknown Sender'}</p>
+                                    <p class="text-gray-600 font-semibold">${fullMessage.subject || 'No Subject'}</p>
+                                    <p class="mt-2 text-gray-800 text-sm">${fullMessage.textBody || 'No text body'}</p>
+                                </div>
+                            `;
+
+                            messagesContainer.appendChild(messageEl);
+                        };
+
+                        fetchFullMessage();
+                    }
+                } catch (error) {
+                    console.error('Error fetching messages:', error);
+                    messagesContainer.innerHTML = 
+                        '<p class="text-red-500 text-center">Error fetching messages</p>';
+                }
+            }
+        }
+
+        new tempmailservice();
+    </script>
+</body>
+</html>
